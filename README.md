@@ -1,6 +1,7 @@
 # physionet
-ML-based Sepsis Prediction using Random Forest &amp; Streamlit
- # 🩺 Sepsis Prediction Using Machine Learning
+ML-based Sepsis Prediction using HistGradientBoosting & Streamlit
+
+# 🩺 Sepsis Prediction Using Machine Learning
 
 ## 1. Project Overview
 
@@ -23,6 +24,7 @@ The project focuses on:
 - Handling missing and invalid values.
 - Removing features with extremely high missing rates.
 - Reducing highly correlated features.
+- Removing leakage-related features from the updated preprocessing.
 - Handling extreme values using outlier clipping.
 - Addressing severe class imbalance in the training data.
 - Comparing different classification models.
@@ -113,8 +115,10 @@ The following columns were removed:
 | `Patient_ID` | Identifier, not a clinical predictor |
 | `Unnamed: 0` | Redundant index-like column |
 | `Hour` | Removed from the current modeling pipeline to avoid relying on the time index |
+| `ICU_length_of_stay` | Removed to reduce potential information leakage |
+| `Time_between_hospital_and_ICU_admission` | Removed to reduce potential information leakage |
 
-`ICU_length_of_stay` was also excluded from the modeling features because it can introduce information leakage when making predictions.
+The last two features were removed from the updated dataset before the final modeling workflow.
 
 ### 5.2 Handling Invalid Values
 
@@ -198,13 +202,17 @@ This removed **13 features**, leaving **27 features** before correlation analysi
 The remaining missing values were handled using:
 
 ```python
-SimpleImputer(strategy="median",add_indicator=True)
+SimpleImputer(
+    strategy="median",
+    add_indicator=True
+)
+```
 
 The imputer was fitted only on the training data and then applied to validation and test data.
 
 Missing-value indicators were also added to preserve information about whether a measurement was originally missing.
 
-After imputation, the feature representation contained **48 columns**.
+> **Note:** The exact number of final model features depends on the updated feature-selection and retraining workflow after removing the two leakage-related features.
 
 ---
 
@@ -226,9 +234,7 @@ was used to identify highly correlated features.
 |---|---|
 | `Administrative_identifier_for_ICU_unit_SICU_false_0_or_true` | Highly correlated with another ICU-related feature |
 
-The number of original modeling features was reduced from **27 to 26**.
-
-The same feature selection was then applied to the validation and test data.
+The feature selection procedure was then applied consistently to the validation and test data.
 
 ---
 
@@ -274,20 +280,18 @@ The validation and test sets were not oversampled, so they retained the original
 
 ## 11. Feature Scaling
 
-`StandardScaler` was used for models that benefit from standardized features.
+The preprocessing strategy was kept model-specific.
 
-The scaler was fitted only on the training data.
-
-### Scaling by Model
+Tree-based models such as Decision Tree, Random Forest, and HistGradientBoosting do not require standardization in the same way as linear models.
 
 | Model | Scaling |
 |---|---|
 | Logistic Regression | Yes |
 | Decision Tree | No |
 | Random Forest | No |
-| HistGradientBoosting | Yes |
+| HistGradientBoosting | No |
 
-The same fitted scaler was then applied to validation and test data.
+The final deployed HGB pipeline uses its saved preprocessing artifacts rather than a separate StandardScaler artifact.
 
 ---
 
@@ -323,6 +327,8 @@ HistGradientBoostingClassifier(
     random_state=42
 )
 ```
+
+HistGradientBoosting was selected as the final model.
 
 ---
 
@@ -362,7 +368,7 @@ The threshold producing the highest validation F1 Score was selected for each mo
 | Random Forest | 0.10 | 15.32% |
 | HistGradientBoosting | 0.55 | 18.03% |
 
-These thresholds were selected only from validation data and then applied to the test probabilities.
+> **Current supplied HGB artifact:** the saved threshold is approximately **0.5247474747**. If the HGB was retrained after the two-feature removal, the newly saved threshold should replace this value and the evaluation tables should be regenerated.
 
 ---
 
@@ -394,6 +400,8 @@ The models were first compared using the validation set.
 
 HistGradientBoosting provided the strongest overall validation performance, particularly in F1, ROC-AUC, and PR-AUC.
 
+> **Important:** These metrics belong to the previously evaluated HGB training run. If the model was retrained after dropping the two leakage-related features, these values should be replaced with the new validation results.
+
 ---
 
 ## 17. Final Test Results
@@ -421,6 +429,8 @@ HistGradientBoosting was selected as the final model because it achieved the bes
 | PR-AUC | 9.68% |
 
 Random Forest achieved slightly higher Recall, but HistGradientBoosting achieved better Precision, F1, ROC-AUC, and PR-AUC.
+
+> **Important:** The results above are the previously evaluated results. They should only be presented as final updated results if the same model was evaluated after the feature-removal change.
 
 ---
 
@@ -511,18 +521,19 @@ Sepsis / No Sepsis
 
 ## 22. Streamlit Application
 
-The trained model can be integrated into a Streamlit application for interactive demonstration.
+The trained model is integrated into a Streamlit application for interactive demonstration.
 
-The application can contain:
+The application is organized into:
 
 | Section | Purpose |
 |---|---|
-| Home | Project overview |
-| Clinical Data | Clinical input fields |
-| Prediction Result | Model prediction |
-| Analysis | Model and feature information |
-| History | Previous predictions during the session |
-| About | Project and educational information |
+| Dashboard | Project overview and navigation |
+| Patient Assessment | Clinical input fields |
+| Risk Assessment | Model prediction and risk result |
+| Prediction Records | Previous prediction records |
+| Model Information | Model, dataset, preprocessing, and evaluation information |
+
+The interface uses the supplied `doctor_patient.png` visual asset as part of the application design.
 
 The application is intended only as a demonstration of Machine Learning deployment and should not be used for clinical decision-making.
 
@@ -533,14 +544,15 @@ The application is intended only as a demonstration of Machine Learning deployme
 The current project structure is:
 
 ```text
-physionet-sepsis/
+physionet/
 │
 ├── app.py
 ├── doctor_patient.png
 ├── feature_names_hgb.pkl
 ├── hgb_threshold.pkl
 ├── hgb.pkl
-└── Imputer_hgb.pkl
+├── Imputer_hgb.pkl
+└── README.md
 ```
 
 ### File Description
@@ -553,6 +565,7 @@ physionet-sepsis/
 | `hgb_threshold.pkl` | Saved HGB classification threshold |
 | `hgb.pkl` | Trained HistGradientBoosting model |
 | `Imputer_hgb.pkl` | Saved imputer used for preprocessing |
+| `README.md` | Project documentation |
 
 ---
 
@@ -604,6 +617,8 @@ Missing-Value Handling
         ↓
 Correlation Filtering
         ↓
+Leakage-Related Feature Removal
+        ↓
 Outlier Clipping
         ↓
 Training-Only Oversampling
@@ -628,16 +643,7 @@ Four models were compared:
 
 The validation set was used for model comparison and threshold selection, while the test set remained separate for final evaluation.
 
-HistGradientBoosting achieved the best overall test performance:
-
-| Metric | Result |
-|---|---:|
-| F1 Score | 18.76% |
-| ROC-AUC | 79.55% |
-| PR-AUC | 9.68% |
-| Precision | 14.17% |
-| Recall | 27.74% |
-| Accuracy | 95.35% |
+HistGradientBoosting achieved the best overall performance in the previously evaluated experiment.
 
 The project also demonstrates why accuracy alone can be misleading in highly imbalanced medical classification problems. Metrics such as Precision, Recall, F1 Score, ROC-AUC, and PR-AUC provide a more meaningful view of model performance.
 
